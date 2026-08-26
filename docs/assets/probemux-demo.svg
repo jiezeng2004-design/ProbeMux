@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="title desc">
+  <title id="title">ProbeMux DSH workflow demo</title>
+  <desc id="desc">A terminal-style illustration showing ProbeMux inspecting a DSH model, probing reasoning capabilities, reviewing the result, and safely applying verified settings.</desc>
+  <rect width="960" height="520" rx="18" fill="#0d1117"/>
+  <rect x="18" y="18" width="924" height="484" rx="16" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+  <circle cx="48" cy="48" r="8" fill="#f85149"/>
+  <circle cx="74" cy="48" r="8" fill="#d29922"/>
+  <circle cx="100" cy="48" r="8" fill="#3fb950"/>
+  <text x="132" y="57" fill="#e6edf3" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="22" font-weight="700">ProbeMux — Probe once. Configure everywhere.</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="19">
+    <text x="48" y="112" fill="#e6edf3">$ npm install -g probemux</text>
+    <text x="48" y="154" fill="#e6edf3">$ probemux dsh inspect</text>
+    <text x="72" y="190" fill="#58a6ff">provider: openrouter-latest</text>
+    <text x="72" y="224" fill="#58a6ff">model: deepseek/deepseek-v4-flash-vision-exp</text>
+    <text x="72" y="258" fill="#3fb950">credential: available</text>
+
+    <text x="48" y="310" fill="#e6edf3">$ probemux dsh sync --active</text>
+    <text x="72" y="346" fill="#3fb950">reasoning medium   VERIFIED</text>
+    <text x="72" y="378" fill="#3fb950">reasoning high     VERIFIED</text>
+    <text x="72" y="410" fill="#f85149">reasoning xhigh    UNSUPPORTED</text>
+    <text x="72" y="442" fill="#d29922">No files changed — review the diff first.</text>
+
+    <text x="48" y="480" fill="#e6edf3">$ probemux dsh sync --active --confirm APPLY</text>
+  </g>
+</svg>
