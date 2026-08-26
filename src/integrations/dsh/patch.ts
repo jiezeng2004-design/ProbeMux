@@ -1,6 +1,10 @@
 import { parseDocument, type Document, YAMLMap, YAMLSeq } from "yaml";
 import type { CapabilityManifest, ManifestEffort, ReasoningDialectCapability, ReasoningLevelCapability } from "../../domain/manifest.ts";
-import { computeWritableReasoningEfforts, getDshAdapterCapabilities } from "./capabilities.ts";
+import {
+  computeWritableReasoningEfforts,
+  getDshAdapterCapabilities,
+  type DshAdapterProviderKind,
+} from "./capabilities.ts";
 import { DSH_EFFORT_LABELS } from "./settings.ts";
 import type { DshPatchOptions, DshPatchResult, DshTarget } from "./types.ts";
 
@@ -148,7 +152,7 @@ export function patchDshSettings(options: {
   }
 
   // --- DSH capability intersection: endpoint VERIFIED ∩ adapter ∩ deployment ---
-  const adapterCapabilities = patchOptions?.adapterCapabilities ?? getDshAdapterCapabilities(target.providerKind);
+  const adapterCapabilities = patchOptions?.adapterCapabilities ?? getDshAdapterCapabilities(target.providerKind as DshAdapterProviderKind);
   const deploymentCapabilities = patchOptions?.deploymentCapabilities;
   if (adapterCapabilities.warning) warnings.push(adapterCapabilities.warning);
   if (deploymentCapabilities?.warning) warnings.push(deploymentCapabilities.warning);

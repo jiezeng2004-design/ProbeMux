@@ -20,6 +20,7 @@ import {
   detectDshVersion,
   getDshAdapterCapabilities,
   getDshDeploymentCapabilities,
+  type DshAdapterProviderKind,
 } from "./integrations/dsh/capabilities.ts";
 import { CREDENTIAL_SOURCE_LABELS, resolveCredential } from "./integrations/dsh/credentials.ts";
 import { CATALOG_ENDPOINT_UNRESOLVED_MESSAGE, discoverDshTarget } from "./integrations/dsh/discovery.ts";
@@ -350,7 +351,9 @@ async function dshSyncCommand(parsed: ParsedArgs): Promise<void> {
     ? await detectDshDeepseekAdapterVersion(target.home)
     : undefined;
   if (adapterDetection?.warning) writeStderr(`warning: ${adapterDetection.warning}\n`);
-  const adapterCapabilities = getDshAdapterCapabilities(target.providerKind, adapterDetection?.version);
+  // target.providerKind is narrowed at discovery; "unknown" already fell into
+  // the deepseek-official branch at runtime, so the cast preserves behaviour.
+  const adapterCapabilities = getDshAdapterCapabilities(target.providerKind as DshAdapterProviderKind, adapterDetection?.version);
   const { text: settingsText, settings } = await loadDshSettings(target.settingsPath);
   const deploymentCapabilities = target.providerKind === "deepseek-official"
     ? getDshDeploymentCapabilities(settings["llm-deepseek"])
