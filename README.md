@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.18-339933)](package.json)
 
-ProbeMux 是一个跨 Agent 的模型能力探测与自动配置工具。它针对你**实际使用的模型 Endpoint** 做黑盒能力探测，生成 Agent 无关的 Canonical Capability Manifest，再通过 Adapter 为 Codex、OpenCode 和 DeepSeek Harness / DSH 生成或同步配置。
+ProbeMux 是一个跨 Agent 的模型能力探测与自动配置工具。它针对你**实际使用的模型 Endpoint** 做黑盒能力探测，生成 Agent 无关的 Canonical Capability Manifest，再通过 Adapter 为 Codex、OpenCode 生成配置，并为 DeepSeek Harness / DSH 提供完整的配置同步工作流。
 
 当前状态：`v0.1.0` 已正式发布，npm 包名为 `probemux`。
 
@@ -89,16 +89,17 @@ confirm APPLY
 | `reasoning.effort` / `reasoning_effort` | ✅ |
 | `system` / `developer` role | ✅ |
 | Tool / function calling | ✅ |
-| Codex Adapter | ✅ |
-| OpenCode Adapter | ✅ |
-| DSH Adapter + native sync workflow | ✅ |
+| Codex Adapter / config render | ✅ |
+| OpenCode Adapter / config render | ✅ |
+| DSH Adapter + inspect / probe / sync | ✅ |
 | Claude Code / Roo / Cline | ⏳ Not in v0.1.0 |
 
 Reasoning 档位覆盖：
 
 `off / none / minimal / low / medium / high / xhigh / max`
 
-> v0.1.0 是 **DSH-first** 的完整集成体验；Codex 与 OpenCode Adapter 已包含，后续版本会继续统一三端的直接 sync 体验。
+> v0.1.0 是 **DSH-first** 的完整集成体验；Codex 与 OpenCode Adapter 已包含，后续版本会继续统一三端的直接 sync 体验。  
+> Codex 与 OpenCode 的 Adapter 映射和配置生成已覆盖自动化测试；v0.1.0 尚未提供与 DSH 相同的 native inspect / sync 工作流。
 
 ## 证据优先，而不是“HTTP 200 = 支持”
 
