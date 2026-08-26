@@ -1,3 +1,4 @@
+import { resolveKnownProviderEndpoint } from "../../discovery/provider-registry.ts";
 import { resolveCredential } from "./credentials.ts";
 import { dshCredentialsPath, dshSettingsPath, resolveDshHome } from "./home.ts";
 import { findProvider, getDefaultModel, loadDshSettings } from "./settings.ts";
@@ -38,6 +39,7 @@ export async function discoverDshTarget(options: DshProbeOptions = {}): Promise<
   }
 
   let baseUrl: string | undefined;
+  let endpointSource: "explicit" | "registry" | undefined;
   let catalogEndpointUnresolved = false;
   let protocolHint: ProtocolHint = "unknown";
   let apiKeyEnv: string | undefined;
@@ -49,8 +51,17 @@ export async function discoverDshTarget(options: DshProbeOptions = {}): Promise<
     const configuredBaseUrl = typeof config.baseURL === "string" && config.baseURL.trim() !== "" ? config.baseURL.trim() : undefined;
     if (configuredBaseUrl) {
       baseUrl = configuredBaseUrl;
+      endpointSource = "explicit";
     } else {
-      catalogEndpointUnresolved = true;
+      // Trusted registry: ONLY explicitly recognized provider ids resolve to
+      // their known endpoint; unknown providers stay unresolved (fail-closed).
+      const registryEntry = resolveKnownProviderEndpoint(providerId);
+      if (registryEntry) {
+        baseUrl = registryEntry.baseUrl;
+        endpointSource = "registry";
+      } else {
+        catalogEndpointUnresolved = true;
+      }
     }
     if (config.api === "openai-completions") protocolHint = "openai-completions";
     else if (config.api === "openai-responses") protocolHint = "openai-responses";
@@ -87,6 +98,8 @@ export async function discoverDshTarget(options: DshProbeOptions = {}): Promise<
     providerKind: found.kind,
     source: found.source,
     baseUrl,
+    ...(endpointSource ? { endpointSource } : {}),
+    isDefaultModel: providerId === def.provider && modelId === def.model,
     protocolHint,
     apiKeyEnv,
     credential,

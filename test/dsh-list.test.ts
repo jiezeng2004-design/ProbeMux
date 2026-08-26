@@ -25,6 +25,10 @@ llm-pi-ai:
       apiKeyEnv: OPENCODE_API_KEY
       models:
         - id: deepseek-v4-flash-free
+    catalog-x:
+      apiKeyEnv: CATALOG_X_API_KEY
+      models:
+        - id: unknown-model
 llm-deepseek:
   apiKeyEnv: DEEPSEEK_API_KEY
 `;
@@ -60,19 +64,28 @@ test("dsh list: missing credential rows report unavailable with the source label
   assert.match(text, /missing \/ no/);
 });
 
-test("dsh list: catalog provider without baseURL is flagged, deepseek keeps safe default", async () => {
+test("dsh list: registry-known opencode resolves, unknown catalog provider stays flagged, deepseek keeps safe default", async () => {
   const home = await mkdtemp(join(tmpdir(), "probemux-list-"));
   const settings = parse(REAL_SETTINGS) as any;
   const result = await buildDshList(settings, home);
   const byId = new Map(result.rows.map((row) => [row.provider, row]));
-  assert.equal(byId.get("opencode")?.catalogEndpointUnresolved, true);
-  assert.equal(byId.get("opencode")?.baseUrl, undefined);
+  // opencode is registry-recognized: resolved WITHOUT an explicit baseURL.
+  assert.equal(byId.get("opencode")?.catalogEndpointUnresolved, false);
+  assert.equal(byId.get("opencode")?.baseUrl, "https://opencode.ai/zen/v1");
+  assert.equal(byId.get("opencode")?.endpointSource, "registry");
+  // catalog-x is NOT recognized: never guessed.
+  assert.equal(byId.get("catalog-x")?.catalogEndpointUnresolved, true);
+  assert.equal(byId.get("catalog-x")?.baseUrl, undefined);
+  assert.equal(byId.get("catalog-x")?.endpointSource, undefined);
   assert.equal(byId.get("openrouter-latest")?.catalogEndpointUnresolved, false);
   assert.equal(byId.get("openrouter-latest")?.baseUrl, "https://openrouter.ai/api/v1");
+  assert.equal(byId.get("openrouter-latest")?.endpointSource, "explicit");
   assert.equal(byId.get("deepseek-official")?.baseUrl, "https://api.deepseek.com");
   assert.equal(byId.get("deepseek-official")?.catalogEndpointUnresolved, false);
   assert.equal(byId.get("openrouter-latest")?.modelCount, 2);
-  assert.match(formatDshList(result), /will not guess the endpoint/);
+  const text = formatDshList(result);
+  assert.match(text, /will not guess the endpoint/);
+  assert.match(text, /opencode\.ai\/zen\/v1 \(registry\)/, "table shows the registry provenance");
 });
 
 test("dsh list: json view shape and zero-secret guarantee", async () => {
@@ -86,7 +99,7 @@ test("dsh list: json view shape and zero-secret guarantee", async () => {
   assert.equal(json.schemaVersion, "0.1.0");
   assert.equal(json.kind, "probemux.dsh-list");
   assert.equal(json.defaultModel.model, "deepseek-v4-flash");
-  assert.equal(json.providers.length, 3);
+  assert.equal(json.providers.length, 4);
   const text = dshListJson(result) + "\n" + formatDshList(result);
   assert.ok(!text.includes(secret), "secrets must never appear in list output");
   assert.ok(!redactSecrets(text).includes(secret));
@@ -101,4 +114,5 @@ test("dsh list: default model marker only on the default provider row", async ()
   assert.equal(byId.get("deepseek-official")?.defaultModel, "deepseek-v4-flash");
   assert.equal(byId.get("openrouter-latest")?.defaultModel, undefined);
   assert.equal(byId.get("opencode")?.defaultModel, undefined);
+  assert.equal(byId.get("catalog-x")?.defaultModel, undefined);
 });

@@ -164,3 +164,57 @@ test("missing settings.yaml raises a friendly error", async () => {
   const home = await mkdtemp(join(tmpdir(), "probemux-dsh-"));
   await assert.rejects(() => discoverDshTarget({ dshHome: home }), /DSH settings not found/);
 });
+
+test("registry-known opencode provider resolves to the OpenCode Zen endpoint without an explicit baseURL", async () => {
+  const home = await makeHome(
+    "agent-default-model:\n" +
+    "  provider: opencode\n" +
+    "  model: deepseek-v4-flash-free\n" +
+    "llm-pi-ai:\n" +
+    "  providers:\n" +
+    "    opencode:\n" +
+    "      apiKeyEnv: OPENCODE_API_KEY\n" +
+    "      api: openai-completions\n",
+  );
+  const target = await discoverDshTarget({ dshHome: home });
+  assert.equal(target.baseUrl, "https://opencode.ai/zen/v1");
+  assert.equal(target.endpointSource, "registry");
+  assert.equal(target.catalogEndpointUnresolved, false);
+  assert.equal(target.isDefaultModel, true);
+});
+
+test("unknown catalog provider stays unresolved even when its id looks opencode-like", async () => {
+  const home = await makeHome(
+    "agent-default-model:\n" +
+    "  provider: opencode-fake\n" +
+    "  model: m\n" +
+    "llm-pi-ai:\n" +
+    "  providers:\n" +
+    "    opencode-fake:\n" +
+    "      apiKeyEnv: K\n",
+  );
+  const target = await discoverDshTarget({ dshHome: home });
+  assert.equal(target.catalogEndpointUnresolved, true);
+  assert.equal(target.baseUrl, undefined);
+  assert.equal(target.endpointSource, undefined);
+});
+
+test("isDefaultModel is false when an override targets a non-default model", async () => {
+  const home = await makeHome(
+    "agent-default-model:\n" +
+    "  provider: p1\n" +
+    "  model: m1\n" +
+    "  reasoningEffort: max\n" +
+    "llm-pi-ai:\n" +
+    "  providers:\n" +
+    "    p1:\n" +
+    "      baseURL: https://one/v1\n" +
+    "      models:\n" +
+    "        - id: m1\n" +
+    "        - id: m2\n",
+  );
+  const def = await discoverDshTarget({ dshHome: home });
+  assert.equal(def.isDefaultModel, true);
+  const other = await discoverDshTarget({ dshHome: home, model: "m2" });
+  assert.equal(other.isDefaultModel, false);
+});

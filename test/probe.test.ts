@@ -69,3 +69,46 @@ test("auth failures do not become capability conclusions", async () => {
   assert.equal(result.classification, "auth-error");
   assert.equal(result.observation, undefined);
 });
+
+test("explicit token-lower-bound error is retried once with a raised limit", async () => {
+  let calls = 0;
+  const bodies: Record<string, unknown>[] = [];
+  const result = await probeOpenAIReasoning({
+    active: true,
+    baseUrl: "https://example.invalid/v1",
+    modelId: "model",
+    protocol: "chat-completions",
+    fetchImpl: async (_input, init) => {
+      calls += 1;
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      bodies.push(body);
+      if (typeof body.max_tokens === "number" && body.max_tokens <= 2) {
+        return new Response(JSON.stringify({ error: { message: "max_tokens must be greater than 2" } }), { status: 400 });
+      }
+      return new Response(JSON.stringify({ error: { message: "reasoning_effort must be one of: low, medium, high" } }), { status: 400 });
+    },
+  });
+  assert.equal(calls, 2, "exactly one retry, never more");
+  const retried = bodies.find((body) => typeof body.max_tokens === "number" && body.max_tokens !== 1);
+  assert.ok(retried, "retried body must exist");
+  assert.ok(Number(retried.max_tokens) >= 3 && Number(retried.max_tokens) <= 1024);
+  assert.equal(result.classification, "enumerated", "the retried response is classified");
+  assert.deepEqual(result.supportedEfforts, ["low", "medium", "high"]);
+  assert.match(result.detail, /retried once after an explicit token-lower-bound error/);
+});
+
+test("non-token 400 is not retried (single request)", async () => {
+  let calls = 0;
+  const result = await probeOpenAIReasoning({
+    active: true,
+    baseUrl: "https://example.invalid/v1",
+    modelId: "model",
+    protocol: "responses",
+    fetchImpl: async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ error: { message: "unknown model" } }), { status: 400 });
+    },
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.classification, "unclassified-error");
+});

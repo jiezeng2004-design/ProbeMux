@@ -444,3 +444,51 @@ test("dsh sync on a catalog provider without baseURL refuses with the exact mess
     },
   );
 });
+
+test("dsh sync on a non-default llm-pi-ai model never touches agent-default-model.reasoningEffort", async () => {
+  const { server, port } = await startMockEndpoint();
+  try {
+    const home = await mkdtemp(join(tmpdir(), "probemux-int-"));
+    const settings =
+      "# DSH settings\n" +
+      "agent-default-model:\n" +
+      "  provider: my-provider\n" +
+      "  model: model-a\n" +
+      "  reasoningEffort: max\n" +
+      "\n" +
+      "llm-pi-ai:\n" +
+      "  providers:\n" +
+      "    my-provider:\n" +
+      "      displayName: My Provider\n" +
+      `      baseURL: http://127.0.0.1:${port}/v1\n` +
+      "      apiKeyEnv: MY_API_KEY\n" +
+      "      api: openai-completions\n" +
+      "      models:\n" +
+      "        - id: model-a\n" +
+      "        - id: model-b\n";
+    await writeFile(join(home, "settings.yaml"), settings);
+    await writeFile(join(home, ".credentials.yaml"), `MY_API_KEY: ${SECRET}\n`);
+    const env = { ...process.env, DSH_HOME: home };
+    delete env.MY_API_KEY;
+
+    // model-b is NOT the global default (model-a is); its VERIFIED set
+    // (low/medium/high) does not contain the global default max.
+    await run(process.execPath, ["src/cli.ts", "dsh", "sync", "--active", "--model", "model-b", "--confirm", "APPLY"], { cwd: REPO_ROOT, env });
+    const after = await readFile(join(home, "settings.yaml"), "utf8");
+    assert.ok(!after.includes(SECRET), "settings must never contain the key");
+    const parsed = parse(after) as any;
+    const provider = parsed["llm-pi-ai"].providers["my-provider"];
+    // model-b IS in the explicit models list, so the patch writes that entry
+    // directly (writeTarget "models"), never a modelOverrides map.
+    assert.deepEqual(provider.models[1].reasoningEfforts, { low: "low", medium: "medium", high: "high" }, "model-b capabilities written into its models[] entry");
+    assert.equal(provider.models[0].reasoningEfforts, undefined, "model-a (the default) must stay untouched");
+    assert.equal(provider.modelOverrides, undefined, "no modelOverrides created for an explicit-models provider");
+    assert.equal(parsed["agent-default-model"].reasoningEffort, "max", "global default max must be preserved");
+
+    // idempotent re-sync of the non-default model
+    const again = await run(process.execPath, ["src/cli.ts", "dsh", "sync", "--active", "--model", "model-b"], { cwd: REPO_ROOT, env });
+    assert.match(again.stdout, /No settings changes required/);
+  } finally {
+    server.close();
+  }
+});

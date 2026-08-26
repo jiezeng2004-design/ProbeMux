@@ -1,4 +1,5 @@
 import { CANONICAL_EFFORTS, type CapabilityObservation, type CanonicalEffort } from "../domain/types.ts";
+import { extractMinimumTokens, isTokenLowerBoundError, raiseTokenLimit } from "./token-limit.ts";
 
 export type OpenAIProbeProtocol = "responses" | "chat-completions";
 
@@ -172,6 +173,61 @@ function observation(
   };
 }
 
+async function classifyResponse(options: OpenAIReasoningProbeOptions, response: Response, rawText: string): Promise<OpenAIReasoningProbeResult> {
+  const message = sanitizeDetail(errorMessage(rawText));
+
+  if (response.ok) {
+    const classification = hasObservedReasoning(safeJson(rawText)) ? "observed" : "accepted-but-unverified";
+    const detail = classification === "observed"
+      ? "The response exposed reasoning usage or metadata."
+      : "The request was accepted, but the endpoint may have ignored the invalid effort value.";
+    return {
+      classification,
+      httpStatus: response.status,
+      supportedEfforts: [],
+      detail,
+      observation: observation(options, classification, detail, []),
+    };
+  }
+
+  if (response.status === 400) {
+    const efforts = extractAllowedEfforts(message);
+    if (efforts.length > 0) {
+      return {
+        classification: "enumerated",
+        httpStatus: 400,
+        supportedEfforts: efforts,
+        detail: message,
+        observation: observation(options, "enumerated", message, efforts),
+      };
+    }
+    if (/unsupported|unknown parameter|unrecognized|extra inputs are not permitted/i.test(message)) {
+      return {
+        classification: "unsupported",
+        httpStatus: 400,
+        supportedEfforts: [],
+        detail: message,
+        observation: observation(options, "unsupported", message, []),
+      };
+    }
+    return { classification: "unclassified-error", httpStatus: 400, supportedEfforts: [], detail: message };
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    return { classification: "auth-error", httpStatus: response.status, supportedEfforts: [], detail: message };
+  }
+  if (response.status === 404) {
+    return { classification: "not-found", httpStatus: 404, supportedEfforts: [], detail: message };
+  }
+  if (response.status === 429) {
+    return { classification: "rate-limited", httpStatus: 429, supportedEfforts: [], detail: message };
+  }
+  if (response.status >= 500) {
+    return { classification: "transient-error", httpStatus: response.status, supportedEfforts: [], detail: message };
+  }
+  return { classification: "unclassified-error", httpStatus: response.status, supportedEfforts: [], detail: message };
+}
+
 export async function probeOpenAIReasoning(options: OpenAIReasoningProbeOptions): Promise<OpenAIReasoningProbeResult> {
   if (!options.active) throw new Error("Active probing is disabled. Re-run with --active after reviewing the possible cost.");
 
@@ -179,6 +235,7 @@ export async function probeOpenAIReasoning(options: OpenAIReasoningProbeOptions)
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 30_000);
   try {
+    const body = buildBody(options.modelId, options.protocol);
     const response = await fetchImpl(resourceUrl(options.baseUrl, options.protocol), {
       method: "POST",
       headers: {
@@ -186,62 +243,42 @@ export async function probeOpenAIReasoning(options: OpenAIReasoningProbeOptions)
         Accept: "application/json",
         ...(options.apiKey ? { Authorization: `Bearer ${options.apiKey}` } : {}),
       },
-      body: JSON.stringify(buildBody(options.modelId, options.protocol)),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
     const text = await response.text();
     const message = sanitizeDetail(errorMessage(text));
 
-    if (response.ok) {
-      const classification = hasObservedReasoning(safeJson(text)) ? "observed" : "accepted-but-unverified";
-      const detail = classification === "observed"
-        ? "The response exposed reasoning usage or metadata."
-        : "The request was accepted, but the endpoint may have ignored the invalid effort value.";
-      return {
-        classification,
-        httpStatus: response.status,
-        supportedEfforts: [],
-        detail,
-        observation: observation(options, classification, detail, []),
-      };
+    // Bounded adaptive max_tokens retry: only when the endpoint explicitly
+    // says the tiny probe token limit is too small; raise to the minimum safe
+    // value; at most one retry (2 requests total), never unlimited.
+    if (response.status === 400 && isTokenLowerBoundError(message)) {
+      const retryController = new AbortController();
+      const retryTimeout = setTimeout(() => retryController.abort(), options.timeoutMs ?? 30_000);
+      try {
+        const retried = await fetchImpl(resourceUrl(options.baseUrl, options.protocol), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            ...(options.apiKey ? { Authorization: `Bearer ${options.apiKey}` } : {}),
+          },
+          body: JSON.stringify(raiseTokenLimit(body, extractMinimumTokens(message))),
+          signal: retryController.signal,
+        });
+        const retriedText = await retried.text();
+        const result = await classifyResponse(options, retried, retriedText);
+        result.detail = `${result.detail} (retried once after an explicit token-lower-bound error)`;
+        return result;
+      } catch (error) {
+        const detail = error instanceof Error && error.name === "AbortError" ? "Probe timed out." : "Probe network failure.";
+        return { classification: "transient-error", supportedEfforts: [], detail };
+      } finally {
+        clearTimeout(retryTimeout);
+      }
     }
 
-    if (response.status === 400) {
-      const efforts = extractAllowedEfforts(message);
-      if (efforts.length > 0) {
-        return {
-          classification: "enumerated",
-          httpStatus: 400,
-          supportedEfforts: efforts,
-          detail: message,
-          observation: observation(options, "enumerated", message, efforts),
-        };
-      }
-      if (/unsupported|unknown parameter|unrecognized|extra inputs are not permitted/i.test(message)) {
-        return {
-          classification: "unsupported",
-          httpStatus: 400,
-          supportedEfforts: [],
-          detail: message,
-          observation: observation(options, "unsupported", message, []),
-        };
-      }
-      return { classification: "unclassified-error", httpStatus: 400, supportedEfforts: [], detail: message };
-    }
-
-    if (response.status === 401 || response.status === 403) {
-      return { classification: "auth-error", httpStatus: response.status, supportedEfforts: [], detail: message };
-    }
-    if (response.status === 404) {
-      return { classification: "not-found", httpStatus: 404, supportedEfforts: [], detail: message };
-    }
-    if (response.status === 429) {
-      return { classification: "rate-limited", httpStatus: 429, supportedEfforts: [], detail: message };
-    }
-    if (response.status >= 500) {
-      return { classification: "transient-error", httpStatus: response.status, supportedEfforts: [], detail: message };
-    }
-    return { classification: "unclassified-error", httpStatus: response.status, supportedEfforts: [], detail: message };
+    return classifyResponse(options, response, text);
   } catch (error) {
     const detail = error instanceof Error && error.name === "AbortError" ? "Probe timed out." : "Probe network failure.";
     return { classification: "transient-error", supportedEfforts: [], detail };

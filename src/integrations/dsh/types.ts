@@ -77,6 +77,8 @@ export interface DshTarget {
   source: string;
   /** Effective endpoint; undefined when catalog-derived and not safely resolvable. */
   baseUrl?: string;
+  /** How baseUrl was obtained: explicit settings field, or the trusted provider registry. */
+  endpointSource?: "explicit" | "registry";
   protocolHint: ProtocolHint;
   apiKeyEnv?: string;
   credential: CredentialResolution;
@@ -86,6 +88,8 @@ export interface DshTarget {
   targetInModels: boolean;
   /** Provider found, but no explicit baseURL exists; endpoint cannot be resolved safely. */
   catalogEndpointUnresolved: boolean;
+  /** True when the target IS the agent-default-model (provider+model); false for any other model. */
+  isDefaultModel?: boolean;
 }
 
 export interface DshProbeOptions {

@@ -1,5 +1,6 @@
 import { fingerprintEndpoint } from "../discovery/openai-compatible.ts";
 import { redactSecrets } from "../security.ts";
+import { extractMinimumTokens, isTokenLowerBoundError, raiseTokenLimit } from "./token-limit.ts";
 import {
   MANIFEST_EFFORTS,
   PROBE_PROTOCOLS,
@@ -33,6 +34,8 @@ interface HttpObservation {
   payload: unknown;
   message: string;
   networkError?: string;
+  /** True when this observation came from a bounded token-lower-bound retry. */
+  retriedTokenLowerBound?: boolean;
 }
 
 interface EvidenceResult {
@@ -117,6 +120,12 @@ function setPath(body: Record<string, unknown>, path: string, value: unknown): v
 function reasoningBody(modelId: string, protocol: ProbeProtocol, path: string): Record<string, unknown> {
   const body = baselineBody(modelId, protocol);
   setPath(body, path, SENTINEL);
+  return body;
+}
+
+function reasoningBodyWithValue(modelId: string, protocol: ProbeProtocol, path: string, value: string): Record<string, unknown> {
+  const body = baselineBody(modelId, protocol);
+  setPath(body, path, value);
   return body;
 }
 
@@ -254,9 +263,7 @@ export async function probeEndpointCapabilities(options: ProbeEngineOptions): Pr
   const evidence: CapabilityEvidence[] = [];
   const conflicts: CapabilityManifest["conflicts"] = [];
 
-  async function request(protocol: ProbeProtocol, body: Record<string, unknown>): Promise<HttpObservation | undefined> {
-    if (requestCount >= maxRequests) return undefined;
-    requestCount += 1;
+  async function doFetch(protocol: ProbeProtocol, body: Record<string, unknown>): Promise<HttpObservation> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 30_000);
     try {
@@ -279,6 +286,24 @@ export async function probeEndpointCapabilities(options: ProbeEngineOptions): Pr
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  async function request(protocol: ProbeProtocol, body: Record<string, unknown>): Promise<HttpObservation | undefined> {
+    if (requestCount >= maxRequests) return undefined;
+    requestCount += 1;
+    let observation = await doFetch(protocol, body);
+    // Bounded adaptive max_tokens retry: fires ONLY when the endpoint
+    // explicitly reports the token limit / request body as too small, raises
+    // to the minimum safe value (endpoint-stated minimum honored, floor 3),
+    // at most once per request, and still inside the per-model request budget
+    // (requestCount is checked again before the retry).
+    if (observation.status === 400 && isTokenLowerBoundError(observation.message) && requestCount < maxRequests) {
+      requestCount += 1;
+      observation = await doFetch(protocol, raiseTokenLimit(body, extractMinimumTokens(observation.message)));
+      observation.message = `${observation.message} (retried once after an explicit token-lower-bound error)`;
+      observation.retriedTokenLowerBound = true;
+    }
+    return observation;
   }
 
   function record(
@@ -321,7 +346,9 @@ export async function probeEndpointCapabilities(options: ProbeEngineOptions): Pr
         status = "VERIFIED";
         confidence = 0.99;
         outcome = "structured-response";
-        detail = "The endpoint returned a protocol-conformant structured response to the baseline request.";
+        detail = "The endpoint returned a protocol-conformant structured response to the baseline request." + (observation.retriedTokenLowerBound
+          ? " The baseline was retried once after an explicit token-lower-bound error."
+          : "");
       } else if ((observation.status === 404 || observation.status === 405) && !/model.*not found|unknown model/i.test(observation.message)) {
         status = "UNSUPPORTED";
         confidence = 0.9;
@@ -365,40 +392,87 @@ export async function probeEndpointCapabilities(options: ProbeEngineOptions): Pr
       let outcome = "not-probed";
       let detail = "Request budget exhausted before the reasoning dialect probe ran.";
       let efforts: ManifestEffort[] = [];
+      let sentinelStatus: CapabilityStatus = "UNKNOWN";
+      let sentinelOutcome = "not-probed";
+      let sentinelDetail = detail;
+      let contrastResult: EvidenceResult | undefined;
       if (observation) {
         efforts = extractManifestEfforts(observation.message);
         if (observation.status === 400 && efforts.length > 0) {
-          status = "VERIFIED";
+          sentinelStatus = status = "VERIFIED";
+          sentinelOutcome = outcome = "validator-enumerated-values";
+          sentinelDetail = detail = observation.message;
           confidence = 0.98;
-          outcome = "validator-enumerated-values";
-          detail = observation.message;
         } else if (observation.status === 400 && explicitlyUnsupported(observation.message, "parameter")) {
-          status = "UNSUPPORTED";
+          sentinelStatus = status = "UNSUPPORTED";
+          sentinelOutcome = outcome = "parameter-rejected";
+          sentinelDetail = detail = observation.message;
           confidence = 0.95;
-          outcome = "parameter-rejected";
-          detail = observation.message;
         } else if (observation.status && observation.status >= 200 && observation.status < 300 && validResponseShape(observation.payload, protocol) && hasReasoningSignal(observation.payload)) {
-          status = "LIKELY";
+          sentinelStatus = status = "LIKELY";
+          sentinelOutcome = outcome = "accepted-with-reasoning-signal";
+          sentinelDetail = detail = "The request returned reasoning metadata, but the invalid sentinel may have been ignored; no effort level is VERIFIED.";
           confidence = 0.75;
-          outcome = "accepted-with-reasoning-signal";
-          detail = "The request returned reasoning metadata, but the invalid sentinel may have been ignored; no effort level is VERIFIED.";
         } else if (observation.status && observation.status >= 200 && observation.status < 300) {
-          outcome = "accepted-without-proof";
-          detail = "The request was accepted, but neither validation nor behavioral evidence proved that the parameter was applied.";
+          sentinelOutcome = outcome = "accepted-without-proof";
+          sentinelDetail = detail = "The request was accepted, but neither validation nor behavioral evidence proved that the parameter was applied.";
         } else {
-          outcome = observation.networkError ? "network-error" : "inconclusive-error";
-          detail = observation.message || "The reasoning dialect probe was inconclusive.";
+          sentinelOutcome = outcome = observation.networkError ? "network-error" : "inconclusive-error";
+          sentinelDetail = detail = observation.message || "The reasoning dialect probe was inconclusive.";
+        }
+
+        // Valid/invalid effort contrast (Kimi-style discrimination): the
+        // endpoint ACCEPTED the invalid sentinel, so no validation evidence
+        // exists yet. ONE minimal contrast request with a valid effort value
+        // (bounded by the same per-model budget) distinguishes:
+        //   - valid value rejected with enumeration  -> VERIFIED levels
+        //   - valid value rejected as unknown param -> UNSUPPORTED
+        //   - valid value accepted + reasoning meta -> LIKELY for that level
+        //   - valid value accepted, no signal      -> still UNKNOWN (ignored?)
+        if (observation.status && observation.status >= 200 && observation.status < 300) {
+          const contrast = await request(protocol, reasoningBodyWithValue(options.modelId, protocol, parameterPath, "high"));
+          if (contrast) {
+            const contrastEfforts = extractManifestEfforts(contrast.message);
+            if (contrast.status === 400 && contrastEfforts.length > 0) {
+              status = "VERIFIED";
+              confidence = 0.98;
+              outcome = "validator-enumerated-values";
+              detail = contrast.message;
+              efforts = contrastEfforts;
+            } else if (contrast.status === 400 && explicitlyUnsupported(contrast.message, "parameter")) {
+              status = "UNSUPPORTED";
+              confidence = 0.9;
+              outcome = "parameter-rejected";
+              detail = contrast.message;
+            } else if (contrast.status && contrast.status >= 200 && contrast.status < 300 && validResponseShape(contrast.payload, protocol) && hasReasoningSignal(contrast.payload)) {
+              status = "LIKELY";
+              confidence = 0.8;
+              outcome = "accepted-with-reasoning-signal";
+              detail = "The invalid sentinel and a valid effort value were both accepted; the response exposed reasoning metadata, so the probed effort is LIKELY (no server-side enumeration).";
+            } else if (contrast.status && contrast.status >= 200 && contrast.status < 300) {
+              outcome = "accepted-without-proof";
+              detail = "Both the invalid sentinel and a valid effort value were accepted without reasoning metadata; the parameter may be ignored.";
+            }
+            contrastResult = record(protocol, "reasoning-dialect", status, confidence, "contrast-valid-effort", detail, contrast, { parameterPath });
+          }
         }
       }
-      const result = record(protocol, "reasoning-dialect", status, confidence, outcome, detail, observation, { parameterPath });
-      const levels: ReasoningLevelCapability[] = efforts.map((canonical) => ({
-        canonical,
-        wireValue: canonical,
-        status: "VERIFIED",
-        confidence: 0.98,
-        evidenceIds: [result.evidence.id],
-      }));
-      dialects.push({ protocol, parameterPath, status, confidence, evidenceIds: [result.evidence.id], levels });
+      const result = record(protocol, "reasoning-dialect", sentinelStatus, confidence, sentinelOutcome, sentinelDetail, observation, { parameterPath });
+      const evidenceIds = contrastResult
+        ? [...new Set([result.evidence.id, contrastResult.evidence.id])]
+        : [result.evidence.id];
+      const levels: ReasoningLevelCapability[] = efforts.length > 0
+        ? efforts.map((canonical) => ({
+            canonical,
+            wireValue: canonical,
+            status: "VERIFIED",
+            confidence: 0.98,
+            evidenceIds,
+          }))
+        : contrastResult && status === "LIKELY"
+          ? [{ canonical: "high", wireValue: "high", status: "LIKELY", confidence: 0.8, evidenceIds }]
+          : [];
+      dialects.push({ protocol, parameterPath, status, confidence, evidenceIds, levels });
     }
   }
 

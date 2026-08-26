@@ -479,3 +479,93 @@ test("unknown deployment thinking: nothing is written", () => {
   assert.equal(result.changed, false);
   assert.ok(result.warnings.some((w) => w.includes("unrecognized value")));
 });
+
+// ---------- Fix 4: non-default target sync never touches agent-default-model.reasoningEffort ----------
+
+const SETTINGS_DEFAULT_MAX =
+  "# DSH settings\n" +
+  "agent-default-model:\n" +
+  "  provider: my-provider\n" +
+  "  model: model-a\n" +
+  "  reasoningEffort: max\n" +
+  "\n" +
+  "llm-pi-ai:\n" +
+  "  providers:\n" +
+  "    my-provider:\n" +
+  "      baseURL: https://api.example.com/v1\n" +
+  "      apiKeyEnv: MY_API_KEY\n" +
+  "      models:\n" +
+  "        - id: model-a\n" +
+  "        - id: model-b\n";
+
+test("non-default llm-pi-ai target never changes agent-default-model.reasoningEffort", () => {
+  // Global default is max; the synced model (model-b) only VERIFIES low/high.
+  // The old bug would demote the global default to high. It must stay max.
+  const result = patchDshSettings({
+    settingsText: SETTINGS_DEFAULT_MAX,
+    target: target({
+      model: "model-b",
+      reasoningEffort: "max",
+      targetInModels: false,
+      isDefaultModel: false,
+    }),
+    manifest: withChatLevels(verifiedManifest(), verifiedLevels("low", "high")),
+  });
+  assert.equal(result.changed, true, "model-b capability is still written");
+  assert.equal(result.writeTarget, "modelOverrides");
+  const parsed = parse(result.candidateText) as any;
+  const overrides = parsed["llm-pi-ai"].providers["my-provider"].modelOverrides["model-b"];
+  assert.deepEqual(overrides.reasoningEfforts, { low: "low", high: "high" });
+  assert.equal(parsed["agent-default-model"].reasoningEffort, "max", "global default must stay max");
+  assert.equal(result.defaultEffort, undefined, "no default effort decision for a non-default target");
+  assert.ok(
+    result.changes.every((c) => !c.includes("agent-default-model")),
+    "the diff must never touch agent-default-model",
+  );
+  assert.ok(result.warnings.some((w) => w.includes("not the global default model")), "clear warning expected");
+});
+
+test("non-default deepseek-official target writes nothing and never demotes the global default", () => {
+  const settings =
+    "agent-default-model:\n" +
+    "  provider: deepseek-official\n" +
+    "  model: deepseek-chat\n" +
+    "  reasoningEffort: max\n" +
+    "llm-deepseek:\n" +
+    "  apiKeyEnv: DEEPSEEK_API_KEY\n";
+  const result = patchDshSettings({
+    settingsText: settings,
+    target: target({
+      providerKind: "deepseek-official",
+      provider: "deepseek-official",
+      model: "other-model",
+      reasoningEffort: "max",
+      modelsState: "catalog",
+      targetInModels: false,
+      isDefaultModel: false,
+    }),
+    manifest: withChatLevels(verifiedManifest(), verifiedLevels("low", "high")),
+    patchOptions: { adapterCapabilities: DEEPSEEK_KNOWN },
+  });
+  assert.equal(result.changed, false);
+  assert.equal(result.writeTarget, "none");
+  assert.equal(result.defaultEffort, undefined);
+  assert.ok(result.warnings.some((w) => w.includes("not the global default model")), "clear warning expected");
+});
+
+test("default llm-pi-ai target still corrects an invalid global default effort (regression guard)", () => {
+  const settings = SETTINGS_DEFAULT_MAX.replace("  reasoningEffort: max\n", "  reasoningEffort: turbo\n");
+  const result = patchDshSettings({
+    settingsText: settings,
+    target: target({
+      model: "model-a",
+      reasoningEffort: "turbo",
+      targetInModels: true,
+      isDefaultModel: true,
+    }),
+    manifest: withChatLevels(verifiedManifest(), verifiedLevels("low", "high")),
+  });
+  assert.equal(result.changed, true);
+  const parsed = parse(result.candidateText) as any;
+  assert.equal(parsed["agent-default-model"].reasoningEffort, "high", "default-target behavior is preserved");
+});

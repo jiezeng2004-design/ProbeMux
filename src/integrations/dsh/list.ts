@@ -1,3 +1,4 @@
+import { resolveKnownProviderEndpoint } from "../../discovery/provider-registry.ts";
 import { CREDENTIAL_SOURCE_LABELS, resolveCredential } from "./credentials.ts";
 import type { CredentialSource, DshSettings } from "./types.ts";
 
@@ -17,6 +18,8 @@ export interface DshListRow {
   baseUrl?: string;
   /** True when the provider has no explicit baseURL and the catalog cannot be resolved safely. */
   catalogEndpointUnresolved: boolean;
+  /** How baseUrl was obtained: explicit settings field, or the trusted provider registry. */
+  endpointSource?: "explicit" | "registry";
   apiKeyEnv?: string;
   credentialSource: CredentialSource;
   credentialAvailable: boolean;
@@ -68,7 +71,10 @@ export async function buildDshList(settings: DshSettings, dshHome: string): Prom
   const providers = isObject(llmpiai) && isObject(llmpiai.providers) ? llmpiai.providers : {};
   for (const [providerId, config] of Object.entries(providers)) {
     if (!isObject(config)) continue;
-    const baseUrl = typeof config.baseURL === "string" && config.baseURL.trim() !== "" ? config.baseURL.trim() : undefined;
+    const explicitBaseUrl = typeof config.baseURL === "string" && config.baseURL.trim() !== "" ? config.baseURL.trim() : undefined;
+    // Trusted registry: only explicitly recognized provider ids resolve; unknown providers stay unresolved.
+    const registryEntry = explicitBaseUrl === undefined ? resolveKnownProviderEndpoint(providerId) : undefined;
+    const baseUrl = explicitBaseUrl ?? registryEntry?.baseUrl;
     const apiKeyEnv = typeof config.apiKeyEnv === "string" && config.apiKeyEnv.trim() !== "" ? config.apiKeyEnv.trim() : undefined;
     const credential = await resolveCredential({ apiKeyEnv: apiKeyEnv ?? "", dshHome });
     rows.push({
@@ -77,6 +83,11 @@ export async function buildDshList(settings: DshSettings, dshHome: string): Prom
       ...(typeof config.displayName === "string" && config.displayName !== "" ? { displayName: config.displayName } : {}),
       modelCount: Array.isArray(config.models) ? config.models.length : 0,
       baseUrl,
+      ...(explicitBaseUrl
+        ? { endpointSource: "explicit" as const }
+        : registryEntry
+          ? { endpointSource: "registry" as const }
+          : {}),
       catalogEndpointUnresolved: baseUrl === undefined,
       apiKeyEnv,
       credentialSource: credential.source,
@@ -110,7 +121,7 @@ export function formatDshList(result: DshListResult): string {
   for (const row of result.rows) {
     const endpoint = row.catalogEndpointUnresolved
       ? "<catalog-derived; not resolved>"
-      : (row.baseUrl ?? "<none>");
+      : (row.baseUrl ?? "<none>") + (row.endpointSource === "registry" ? " (registry)" : "");
     const credential = row.apiKeyEnv
       ? `${row.apiKeyEnv} (${CREDENTIAL_SOURCE_LABELS[row.credentialSource]} / ${row.credentialAvailable ? "yes" : "no"})`
       : "(no apiKeyEnv)";
@@ -162,6 +173,7 @@ export function dshListJson(result: DshListResult): string {
         modelCount: row.modelCount,
         defaultModel: row.defaultModel ?? null,
         baseUrl: row.catalogEndpointUnresolved ? null : (row.baseUrl ?? null),
+        endpointSource: row.endpointSource ?? null,
         apiKeyEnv: row.apiKeyEnv ?? null,
         credentialSource: row.credentialSource,
         credentialAvailable: row.credentialAvailable,

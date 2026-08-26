@@ -29,7 +29,9 @@ type Scalar = string | number | boolean | null;
  *   providers/sections, comments) is preserved untouched.
  * - agent-default-model.reasoningEffort keeps the current value when it is
  *   still VERIFIED; otherwise a verified default is chosen (high first) and the
- *   change appears in the diff.
+ *   change appears in the diff. This only applies when the sync target IS the
+ *   global default model (provider+model); a non-default target never touches
+ *   agent-default-model.reasoningEffort.
  */
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -180,6 +182,12 @@ export function patchDshSettings(options: {
   if (target.providerKind === "deepseek-official") {
     // deepseek-official exposes no per-model reasoningEfforts surface in
     // settings.yaml; only agent-default-model.reasoningEffort can change.
+    // That global value may only be touched when the sync target IS the
+    // global default model; a non-default target never demotes it.
+    if (target.isDefaultModel === false) {
+      warnings.push("Target model is not the global default model; agent-default-model.reasoningEffort was left untouched.");
+      return noop();
+    }
     defaultEffort = chooseDefaultEffort(patchOptions?.defaultEffort, writable, target.reasoningEffort, changes, warnings);
     if (defaultEffort !== undefined) {
       doc.setIn(["agent-default-model", "reasoningEffort"], defaultEffort);
@@ -229,7 +237,7 @@ export function patchDshSettings(options: {
       }
     }
 
-    if (writeTarget !== "none" && changes.length > 0) {
+    if (writeTarget !== "none" && changes.length > 0 && target.isDefaultModel !== false) {
       defaultEffort = chooseDefaultEffort(
         patchOptions?.defaultEffort,
         writable,
@@ -240,6 +248,8 @@ export function patchDshSettings(options: {
       if (defaultEffort !== undefined) {
         doc.setIn(["agent-default-model", "reasoningEffort"], defaultEffort);
       }
+    } else if (writeTarget !== "none" && changes.length > 0 && target.isDefaultModel === false) {
+      warnings.push("Target model is not the global default model; agent-default-model.reasoningEffort was left untouched.");
     }
   }
 
