@@ -62,7 +62,7 @@ test("npm pack -> fresh install -> probemux.cmd works (help, dsh help, dsh inspe
     // 3. probemux --help -> exit 0
     const help = await runCmd(binCmd, ["--help"], { cwd: consumer });
     assert.equal(help.code, 0, `--help exit ${help.code}: ${help.stderr}`);
-    assert.match(help.stdout, /ProbeMux v0\.1\.0-dev/);
+    assert.match(help.stdout, /ProbeMux v0\.1\.0/);
     assert.ok(!help.stderr.includes("ERR_UNSUPPORTED"), "no Node type-stripping errors");
 
     // 4. probemux dsh --help -> exit 0

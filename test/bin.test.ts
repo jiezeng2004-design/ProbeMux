@@ -10,7 +10,7 @@ const LAUNCHER = fileURLToPath(new URL("../bin/probemux.ts", import.meta.url));
 
 test("bin launcher prints help like the direct CLI", async () => {
   const result = await run(process.execPath, [LAUNCHER, "--help"], { cwd: REPO_ROOT });
-  assert.match(result.stdout, /ProbeMux v0\.1\.0-dev/);
+  assert.match(result.stdout, /ProbeMux v0\.1\.0/);
   assert.match(result.stdout, /Usage:/);
   assert.match(result.stdout, /probemux dsh inspect/);
 });

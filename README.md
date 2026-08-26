@@ -4,7 +4,7 @@
 
 ProbeMux 是一个跨 Agent 的模型能力探测与自动配置工具。它针对用户实际提供的模型 Endpoint 进行黑盒探测，生成 Agent 无关的 Canonical Capability Manifest，再通过 Adapter 生成 Codex、OpenCode 和 DeepSeek Harness / DSH 配置。
 
-当前状态：`v0.1.0-dev` MVP。项目包保持 `private`，不会发布 npm 或自动推送远端。
+当前状态：`v0.1.0` 已正式发布，npm 包名为 `probemux`（`probemux@0.1.0`），CLI 全局安装：`npm install -g probemux`。
 
 ## v0.1.0 支持范围
 
@@ -79,7 +79,7 @@ node src/cli.ts validate examples/manifests/verified-fixture.json
 普通 DSH 用户只需要这 5 条命令（前 3 条完全只读，`dsh list` / `dsh inspect` 不发任何网络请求）：
 
 ```bash
-npm install -g probemux-workspace   # 或 npm install probemux-workspace（本地安装）
+npm install -g probemux   # 或 npm install probemux（本地安装）
 probemux dsh list                   # 1. 看 DSH 已配置了哪些 provider/model，凭据是否可用
 probemux dsh inspect                # 2. 看当前默认 provider/model 的 endpoint 与凭据状态
 probemux dsh sync --active          # 3. 真实探测端点并只展示 diff（不会写入任何内容）
@@ -162,4 +162,4 @@ node src/cli.ts apply --plan codex-plan.json --confirm APPLY
 
 ## 命名
 
-项目、CLI 和本地 package 已正式命名为 `ProbeMux` / `probemux`。该工作区保持 `private`；在公开发布前仍须单独完成名称与包注册可用性检查。
+项目、CLI 和 npm 公共包正式命名为 `ProbeMux` / `probemux`。npm registry 包名可用性已确认，`probemux@0.1.0` 已正式发布。

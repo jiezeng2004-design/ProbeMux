@@ -126,7 +126,7 @@ function printWarnings(warnings: string[]): void {
 }
 
 function help(): string {
-  return `ProbeMux v0.1.0-dev — Probe once. Configure everywhere.
+  return `ProbeMux v0.1.0 — Probe once. Configure everywhere.
 
 Usage:
   probemux scan --base-url <url> [--api-key-env ENV] [--output scan.json]
