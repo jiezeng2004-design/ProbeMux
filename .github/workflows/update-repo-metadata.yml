@@ -1,0 +1,34 @@
+name: Update repository metadata
+
+on:
+  push:
+    paths:
+      - .github/workflows/update-repo-metadata.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update description and homepage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh api --method PATCH "repos/$GH_REPO" \
+            -f description='Probe once. Configure everywhere. Evidence-first model capability probing and configuration for coding agents.' \
+            -f homepage='https://github.com/jiezeng2004-design/ProbeMux'
+
+      - name: Update topics
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh api --method PUT "repos/$GH_REPO/topics" \
+            -H 'Accept: application/vnd.github+json' \
+            --input - <<'JSON'
+          {"names":["llm","coding-agents","codex","opencode","deepseek-harness","model-probing","reasoning-effort","typescript","cli","ai-agents"]}
+          JSON
