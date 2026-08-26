@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://probemux.invalid/schema/capability-manifest-0.1.0.json",
+  "title": "ProbeMux Canonical Capability Manifest 0.1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "kind",
+    "identity",
+    "protocols",
+    "reasoning",
+    "messageRoles",
+    "toolCalling",
+    "evidence",
+    "conflicts",
+    "generatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "0.1.0" },
+    "kind": { "const": "probemux.capability-manifest" },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["providerId", "modelId", "endpointFingerprint"],
+      "properties": {
+        "providerId": { "type": "string", "minLength": 1 },
+        "modelId": { "type": "string", "minLength": 1 },
+        "endpointFingerprint": { "type": "string", "minLength": 1 }
+      }
+    },
+    "protocols": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["responses", "chat-completions"],
+      "properties": {
+        "responses": { "$ref": "#/$defs/protocolCapability" },
+        "chat-completions": { "$ref": "#/$defs/protocolCapability" }
+      }
+    },
+    "reasoning": {
+      "allOf": [{ "$ref": "#/$defs/fact" }],
+      "type": "object",
+      "required": ["status", "confidence", "evidenceIds", "levels", "dialects"],
+      "properties": {
+        "status": { "$ref": "#/$defs/status" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "evidenceIds": { "$ref": "#/$defs/evidenceIds" },
+        "levels": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reasoningLevel" }
+        },
+        "dialects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reasoningDialect" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "messageRoles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system", "developer"],
+      "properties": {
+        "system": { "$ref": "#/$defs/crossProtocolCompatibility" },
+        "developer": { "$ref": "#/$defs/crossProtocolCompatibility" }
+      }
+    },
+    "toolCalling": { "$ref": "#/$defs/crossProtocolCompatibility" },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidence" }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "evidenceIds", "detail"],
+        "properties": {
+          "field": { "type": "string" },
+          "evidenceIds": { "$ref": "#/$defs/evidenceIds" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "generatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "status": {
+      "enum": ["VERIFIED", "LIKELY", "INFERRED", "UNKNOWN", "UNSUPPORTED"]
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "evidenceIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "fact": {
+      "type": "object",
+      "required": ["status", "confidence", "evidenceIds"],
+      "properties": {
+        "status": { "$ref": "#/$defs/status" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "evidenceIds": { "$ref": "#/$defs/evidenceIds" }
+      }
+    },
+    "protocol": { "enum": ["responses", "chat-completions"] },
+    "protocolCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "confidence", "evidenceIds", "protocol", "endpointPath"],
+      "properties": {
+        "status": { "$ref": "#/$defs/status" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "evidenceIds": { "$ref": "#/$defs/evidenceIds" },
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "endpointPath": { "enum": ["/v1/responses", "/v1/chat/completions"] }
+      }
+    },
+    "reasoningLevel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "confidence", "evidenceIds", "canonical", "wireValue"],
+      "properties": {
+        "status": { "$ref": "#/$defs/status" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "evidenceIds": { "$ref": "#/$defs/evidenceIds" },
+        "canonical": {
+          "enum": ["off", "none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        },
+        "wireValue": { "type": ["string", "number", "boolean", "null"] }
+      }
+    },
+    "reasoningDialect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "confidence", "evidenceIds", "protocol", "parameterPath", "levels"],
+      "properties": {
+        "status": { "$ref": "#/$defs/status" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "evidenceIds": { "$ref": "#/$defs/evidenceIds" },
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "parameterPath": { "type": "string", "minLength": 1 },
+        "levels": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reasoningLevel" }
+        }
+      }
+    },
+    "protocolCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "confidence", "evidenceIds", "protocol"],
+      "properties": {
+        "status": { "$ref": "#/$defs/status" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "evidenceIds": { "$ref": "#/$defs/evidenceIds" },
+        "protocol": { "$ref": "#/$defs/protocol" }
+      }
+    },
+    "crossProtocolCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "confidence", "evidenceIds", "byProtocol"],
+      "properties": {
+        "status": { "$ref": "#/$defs/status" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "evidenceIds": { "$ref": "#/$defs/evidenceIds" },
+        "byProtocol": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/protocolCompatibility" }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "probe", "protocol", "status", "confidence", "observedAt", "endpointPath", "outcome", "detail"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "probe": { "enum": ["protocol", "reasoning-dialect", "message-role", "tool-calling"] },
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "status": { "$ref": "#/$defs/status" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "observedAt": { "type": "string", "format": "date-time" },
+        "endpointPath": { "type": "string" },
+        "outcome": { "type": "string" },
+        "detail": { "type": "string", "maxLength": 500 },
+        "httpStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "parameterPath": { "type": "string" },
+        "role": { "enum": ["system", "developer"] }
+      }
+    }
+  }
+}

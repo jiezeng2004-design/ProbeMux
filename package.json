@@ -1,0 +1,24 @@
+{
+  "name": "probemux-workspace",
+  "version": "0.1.0-dev",
+  "private": true,
+  "description": "Probe once. Configure everywhere. Evidence-first endpoint capability probing for coding agents.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "bin": {
+    "probemux": "./bin/probemux.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.8.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "check": "node --test test/*.test.ts && node src/cli.ts validate examples/manifests/verified-fixture.json",
+    "demo:dsh": "node src/cli.ts render examples/manifests/verified-fixture.json --target dsh --default-effort high",
+    "demo:codex": "node src/cli.ts render examples/manifests/verified-fixture.json --target codex --default-effort high",
+    "demo:opencode": "node src/cli.ts render examples/manifests/verified-fixture.json --target opencode --default-effort high"
+  },
+  "license": "MIT"
+}

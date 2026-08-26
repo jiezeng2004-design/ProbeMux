@@ -1,0 +1,315 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://probemux.invalid/schema/model-profile-0.1.json",
+  "title": "ProbeMux ModelProfile 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "identity",
+    "reasoning",
+    "evidence",
+    "conflicts",
+    "resolvedAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "0.1"
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerId",
+        "modelId",
+        "protocol"
+      ],
+      "properties": {
+        "providerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protocol": {
+          "$ref": "#/$defs/protocol"
+        },
+        "endpointFingerprint": {
+          "type": "string"
+        },
+        "canonicalModelId": {
+          "type": "string"
+        }
+      }
+    },
+    "reasoning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "wire"
+      ],
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/reasoningState"
+        },
+        "effort": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "levels"
+          ],
+          "properties": {
+            "levels": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/effortLevel"
+              }
+            },
+            "default": {
+              "$ref": "#/$defs/canonicalEffort"
+            }
+          }
+        },
+        "toggle": {
+          "type": "object",
+          "required": [
+            "supported"
+          ],
+          "properties": {
+            "supported": {
+              "type": "boolean"
+            },
+            "on": {
+              "$ref": "#/$defs/wireValue"
+            },
+            "off": {
+              "$ref": "#/$defs/wireValue"
+            }
+          }
+        },
+        "budgetTokens": {
+          "type": "object",
+          "required": [
+            "supported"
+          ],
+          "properties": {
+            "supported": {
+              "type": "boolean"
+            },
+            "min": {
+              "type": "integer"
+            },
+            "max": {
+              "type": "integer"
+            },
+            "dynamicValue": {
+              "type": "integer"
+            },
+            "offValue": {
+              "type": "integer"
+            }
+          }
+        },
+        "adaptive": {
+          "type": "boolean"
+        },
+        "wire": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "protocol"
+          ],
+          "properties": {
+            "protocol": {
+              "$ref": "#/$defs/protocol"
+            },
+            "effortPath": {
+              "type": "string"
+            },
+            "togglePath": {
+              "type": "string"
+            },
+            "budgetPath": {
+              "type": "string"
+            },
+            "reasoningContentPath": {
+              "type": "string"
+            },
+            "omitWhenOff": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "developerRole": {
+          "$ref": "#/$defs/reasoningState"
+        },
+        "toolCalls": {
+          "$ref": "#/$defs/reasoningState"
+        },
+        "reasoningUsage": {
+          "$ref": "#/$defs/reasoningState"
+        },
+        "interleavedThinking": {
+          "$ref": "#/$defs/reasoningState"
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence"
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "field",
+          "chosenEvidenceId",
+          "conflictingEvidenceId",
+          "chosenValue",
+          "conflictingValue"
+        ]
+      }
+    },
+    "resolvedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "canonicalEffort": {
+      "enum": [
+        "off",
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "reasoningState": {
+      "enum": [
+        "supported",
+        "unsupported",
+        "unknown",
+        "accepted-but-unverified"
+      ]
+    },
+    "protocol": {
+      "enum": [
+        "openai-responses",
+        "openai-chat-completions",
+        "anthropic-messages",
+        "gemini-generate-content",
+        "unknown"
+      ]
+    },
+    "wireValue": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "null"
+      ]
+    },
+    "effortLevel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonical",
+        "wire"
+      ],
+      "properties": {
+        "canonical": {
+          "$ref": "#/$defs/canonicalEffort"
+        },
+        "wire": {
+          "$ref": "#/$defs/wireValue"
+        },
+        "behavior": {
+          "enum": [
+            "send",
+            "omit"
+          ]
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "source",
+        "observedAt",
+        "confidence",
+        "claim",
+        "outcome"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "user-override",
+            "active-probe",
+            "provider-official",
+            "provider-catalog",
+            "models-dev",
+            "endpoint-metadata",
+            "heuristic"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "claim": {
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "declared",
+            "rejected",
+            "rejected-enumerated",
+            "accepted",
+            "observed",
+            "manual"
+          ]
+        },
+        "detail": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

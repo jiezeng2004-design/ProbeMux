@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "0.1.0",
+  "kind": "probemux.capability-manifest",
+  "identity": {
+    "providerId": "fixture-gateway",
+    "modelId": "fixture-reasoning-model",
+    "endpointFingerprint": "https://api.example.invalid/v1"
+  },
+  "protocols": {
+    "responses": {
+      "protocol": "responses",
+      "endpointPath": "/v1/responses",
+      "status": "VERIFIED",
+      "confidence": 0.99,
+      "evidenceIds": ["protocol-responses"]
+    },
+    "chat-completions": {
+      "protocol": "chat-completions",
+      "endpointPath": "/v1/chat/completions",
+      "status": "VERIFIED",
+      "confidence": 0.99,
+      "evidenceIds": ["protocol-chat"]
+    }
+  },
+  "reasoning": {
+    "status": "VERIFIED",
+    "confidence": 0.98,
+    "evidenceIds": ["reasoning-responses", "reasoning-chat"],
+    "levels": [
+      { "canonical": "none", "wireValue": "none", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] },
+      { "canonical": "minimal", "wireValue": "minimal", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] },
+      { "canonical": "low", "wireValue": "low", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] },
+      { "canonical": "medium", "wireValue": "medium", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] },
+      { "canonical": "high", "wireValue": "high", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] },
+      { "canonical": "xhigh", "wireValue": "xhigh", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] },
+      { "canonical": "max", "wireValue": "max", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] }
+    ],
+    "dialects": [
+      {
+        "protocol": "responses",
+        "parameterPath": "reasoning.effort",
+        "status": "VERIFIED",
+        "confidence": 0.98,
+        "evidenceIds": ["reasoning-responses"],
+        "levels": [
+          { "canonical": "none", "wireValue": "none", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] },
+          { "canonical": "minimal", "wireValue": "minimal", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] },
+          { "canonical": "low", "wireValue": "low", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] },
+          { "canonical": "medium", "wireValue": "medium", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] },
+          { "canonical": "high", "wireValue": "high", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] },
+          { "canonical": "xhigh", "wireValue": "xhigh", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] },
+          { "canonical": "max", "wireValue": "max", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-responses"] }
+        ]
+      },
+      {
+        "protocol": "chat-completions",
+        "parameterPath": "reasoning_effort",
+        "status": "VERIFIED",
+        "confidence": 0.98,
+        "evidenceIds": ["reasoning-chat"],
+        "levels": [
+          { "canonical": "none", "wireValue": "none", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-chat"] },
+          { "canonical": "minimal", "wireValue": "minimal", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-chat"] },
+          { "canonical": "low", "wireValue": "low", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-chat"] },
+          { "canonical": "medium", "wireValue": "medium", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-chat"] },
+          { "canonical": "high", "wireValue": "high", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-chat"] },
+          { "canonical": "xhigh", "wireValue": "xhigh", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-chat"] },
+          { "canonical": "max", "wireValue": "max", "status": "VERIFIED", "confidence": 0.98, "evidenceIds": ["reasoning-chat"] }
+        ]
+      }
+    ]
+  },
+  "messageRoles": {
+    "system": {
+      "status": "VERIFIED",
+      "confidence": 0.97,
+      "evidenceIds": ["role-system-responses", "role-system-chat"],
+      "byProtocol": [
+        { "protocol": "responses", "status": "VERIFIED", "confidence": 0.97, "evidenceIds": ["role-system-responses"] },
+        { "protocol": "chat-completions", "status": "VERIFIED", "confidence": 0.97, "evidenceIds": ["role-system-chat"] }
+      ]
+    },
+    "developer": {
+      "status": "VERIFIED",
+      "confidence": 0.97,
+      "evidenceIds": ["role-developer-responses", "role-developer-chat"],
+      "byProtocol": [
+        { "protocol": "responses", "status": "VERIFIED", "confidence": 0.97, "evidenceIds": ["role-developer-responses"] },
+        { "protocol": "chat-completions", "status": "VERIFIED", "confidence": 0.97, "evidenceIds": ["role-developer-chat"] }
+      ]
+    }
+  },
+  "toolCalling": {
+    "status": "VERIFIED",
+    "confidence": 0.99,
+    "evidenceIds": ["tools-responses", "tools-chat"],
+    "byProtocol": [
+      { "protocol": "responses", "status": "VERIFIED", "confidence": 0.99, "evidenceIds": ["tools-responses"] },
+      { "protocol": "chat-completions", "status": "VERIFIED", "confidence": 0.99, "evidenceIds": ["tools-chat"] }
+    ]
+  },
+  "evidence": [
+    { "id": "protocol-responses", "probe": "protocol", "protocol": "responses", "status": "VERIFIED", "confidence": 0.99, "observedAt": "2026-08-25T00:00:00.000Z", "endpointPath": "/v1/responses", "outcome": "structured-response", "detail": "Fixture: protocol-conformant response.", "httpStatus": 200 },
+    { "id": "protocol-chat", "probe": "protocol", "protocol": "chat-completions", "status": "VERIFIED", "confidence": 0.99, "observedAt": "2026-08-25T00:00:00.000Z", "endpointPath": "/v1/chat/completions", "outcome": "structured-response", "detail": "Fixture: protocol-conformant response.", "httpStatus": 200 },
+    { "id": "reasoning-responses", "probe": "reasoning-dialect", "protocol": "responses", "status": "VERIFIED", "confidence": 0.98, "observedAt": "2026-08-25T00:00:00.000Z", "endpointPath": "/v1/responses", "parameterPath": "reasoning.effort", "outcome": "validator-enumerated-values", "detail": "Fixture: validator enumerated allowed values.", "httpStatus": 400 },
+    { "id": "reasoning-chat", "probe": "reasoning-dialect", "protocol": "chat-completions", "status": "VERIFIED", "confidence": 0.98, "observedAt": "2026-08-25T00:00:00.000Z", "endpointPath": "/v1/chat/completions", "parameterPath": "reasoning_effort", "outcome": "validator-enumerated-values", "detail": "Fixture: validator enumerated allowed values.", "httpStatus": 400 },
+    { "id": "role-system-responses", "probe": "message-role", "protocol": "responses", "role": "system", "status": "VERIFIED", "confidence": 0.97, "observedAt": "2026-08-25T00:00:00.000Z", "endpointPath": "/v1/responses", "outcome": "structured-response", "detail": "Fixture: system role accepted.", "httpStatus": 200 },
+    { "id": "role-system-chat", "probe": "message-role", "protocol": "chat-completions", "role": "system", "status": "VERIFIED", "confidence": 0.97, "observedAt": "2026-08-25T00:00:00.000Z", "endpointPath": "/v1/chat/completions", "outcome": "structured-response", "detail": "Fixture: system role accepted.", "httpStatus": 200 },
+    { "id": "role-developer-responses", "probe": "message-role", "protocol": "responses", "role": "developer", "status": "VERIFIED", "confidence": 0.97, "observedAt": "2026-08-25T00:00:00.000Z", "endpointPath": "/v1/responses", "outcome": "structured-response", "detail": "Fixture: developer role accepted.", "httpStatus": 200 },
+    { "id": "role-developer-chat", "probe": "message-role", "protocol": "chat-completions", "role": "developer", "status": "VERIFIED", "confidence": 0.97, "observedAt": "2026-08-25T00:00:00.000Z", "endpointPath": "/v1/chat/completions", "outcome": "structured-response", "detail": "Fixture: developer role accepted.", "httpStatus": 200 },
+    { "id": "tools-responses", "probe": "tool-calling", "protocol": "responses", "status": "VERIFIED", "confidence": 0.99, "observedAt": "2026-08-25T00:00:00.000Z", "endpointPath": "/v1/responses", "outcome": "expected-tool-call", "detail": "Fixture: expected function call returned.", "httpStatus": 200 },
+    { "id": "tools-chat", "probe": "tool-calling", "protocol": "chat-completions", "status": "VERIFIED", "confidence": 0.99, "observedAt": "2026-08-25T00:00:00.000Z", "endpointPath": "/v1/chat/completions", "outcome": "expected-tool-call", "detail": "Fixture: expected function call returned.", "httpStatus": 200 }
+  ],
+  "conflicts": [],
+  "generatedAt": "2026-08-25T00:00:00.000Z"
+}
