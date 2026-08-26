@@ -57,19 +57,63 @@ export function parseDotenv(text: string): Record<string, string> {
 }
 
 /**
+ * Extract one credential from a parsed .credentials.yaml document.
+ *
+ * DSH writes the versioned refs schema:
+ *   version: 1
+ *   refs:
+ *     DEEPSEEK_API_KEY: sk-...
+ *     OPENROUTER_LATEST_API_KEY: sk-...
+ * Legacy ProbeMux configs used the flat schema:
+ *   DEEPSEEK_API_KEY: sk-...
+ *
+ * Both are accepted with identical fail-closed semantics. Schema detection is
+ * structural and unambiguous: a top-level 'refs' that is a key-value mapping
+ * selects the versioned refs schema (the lookup happens inside refs, exactly
+ * as DSH resolves it); any other top-level shape is the flat schema.
+ *
+ * Throws when the document cannot be used safely:
+ * - 'refs' is present but is not a key-value mapping (corrupt versioned file)
+ * - the target key is present but null / not a string / empty
+ * The caller decides what "absent" means (fallback vs unresolved).
+ */
+function extractCredentialValue(
+  record: Record<string, unknown>,
+  apiKeyEnv: string,
+  credentialsPath: string,
+): { present: boolean; value: unknown } {
+  const refs = record["refs"];
+  if (refs !== undefined) {
+    if (typeof refs !== "object" || refs === null || Array.isArray(refs)) {
+      throw new Error(
+        `DSH credential file ${credentialsPath} has a 'refs' section that is not a key-value mapping.`,
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(refs, apiKeyEnv)) {
+      return { present: true, value: (refs as Record<string, unknown>)[apiKeyEnv] };
+    }
+    return { present: false, value: undefined };
+  }
+  if (Object.prototype.hasOwnProperty.call(record, apiKeyEnv)) {
+    return { present: true, value: record[apiKeyEnv] };
+  }
+  return { present: false, value: undefined };
+}
+
+/**
  * Resolve an API key by reference only. Priority matches DSH:
  * 1. current ProbeMux process environment
- * 2. $DSH_HOME/.credentials.yaml
+ * 2. $DSH_HOME/.credentials.yaml (versioned refs schema AND legacy flat schema)
  * 3. invocation cwd/.env
  * 4. $DSH_HOME/.env
  *
  * The .credentials.yaml step is FAIL-CLOSED:
  * - file absent -> continue to the next source
- * - file valid but key absent -> continue to the next source
- * - file present but YAML malformed, top level is not a key-value mapping, or
- *   the target key is null / not a string / empty -> FAIL (no fallback).
- *   ProbeMux must never silently use a credential that DSH itself would not
- *   use from the same file.
+ * - file valid but key absent (from either schema) -> continue to the next source
+ * - file present but YAML malformed, top level is not a key-value mapping, the
+ *   'refs' section is not a key-value mapping, or the target key is null / not
+ *   a string / empty -> FAIL (no fallback). ProbeMux must never silently use a
+ *   credential that DSH itself would not use from the same file.
  *
  * A resolved value shorter than 4 characters is rejected (CredentialTooShortError)
  * instead of being used: it cannot be safely redacted, and the selected source
@@ -109,8 +153,9 @@ ${credentialsPath}`);
       throw new Error(`DSH credential file ${credentialsPath} must contain a key-value mapping.`);
     }
     const record = data as Record<string, unknown>;
-    if (apiKeyEnv in record) {
-      const value = record[apiKeyEnv];
+    const extracted = extractCredentialValue(record, apiKeyEnv, credentialsPath);
+    if (extracted.present) {
+      const value = extracted.value;
       if (typeof value !== "string" || value.trim() === "") {
         throw new Error(`Credential '${apiKeyEnv}' exists in .credentials.yaml but is not a valid non-empty string.`);
       }

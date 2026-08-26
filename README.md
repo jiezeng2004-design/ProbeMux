@@ -76,13 +76,24 @@ node src/cli.ts validate examples/manifests/verified-fixture.json
 > ProbeMux reads the existing DSH configuration and credential reference, probes the actual
 > endpoint, and patches only the verified model capabilities.
 
-首先查看 ProbeMux 从 DSH 自动发现了什么（不发送任何探测请求）：
+普通 DSH 用户只需要这 5 条命令（前 3 条完全只读，`dsh list` / `dsh inspect` 不发任何网络请求）：
 
 ```bash
-probemux dsh inspect
-# 或 JSON 输出
-probemux dsh inspect --json
+npm install -g probemux-workspace   # 或 npm install probemux-workspace（本地安装）
+probemux dsh list                   # 1. 看 DSH 已配置了哪些 provider/model，凭据是否可用
+probemux dsh inspect                # 2. 看当前默认 provider/model 的 endpoint 与凭据状态
+probemux dsh sync --active          # 3. 真实探测端点并只展示 diff（不会写入任何内容）
+probemux dsh sync --active --confirm APPLY   # 4. 审阅 diff 后写回（时间戳备份 + 原子替换）
 ```
+
+也可以单独验证某个 provider/model：
+
+```bash
+probemux dsh inspect --provider openrouter-latest --model deepseek/deepseek-v4-flash-vision-exp
+probemux dsh probe --active --provider openrouter-latest --model deepseek/deepseek-v4-flash-vision-exp
+```
+
+首次使用也可用 JSON 输出确认细节（`dsh list --json` / `dsh inspect --json`）。
 
 一键探测 + 生成最小候选补丁并展示 diff（**不会写入任何内容**）：
 

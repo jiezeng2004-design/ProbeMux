@@ -24,6 +24,8 @@ import {
 } from "./integrations/dsh/capabilities.ts";
 import { CREDENTIAL_SOURCE_LABELS, resolveCredential } from "./integrations/dsh/credentials.ts";
 import { CATALOG_ENDPOINT_UNRESOLVED_MESSAGE, discoverDshTarget } from "./integrations/dsh/discovery.ts";
+import { dshSettingsPath, resolveDshHome } from "./integrations/dsh/home.ts";
+import { buildDshList, dshListJson, formatDshList } from "./integrations/dsh/list.ts";
 import { patchDshSettings } from "./integrations/dsh/patch.ts";
 import { loadDshSettings } from "./integrations/dsh/settings.ts";
 import type { DshProbeOptions } from "./integrations/dsh/types.ts";
@@ -133,6 +135,7 @@ Usage:
   probemux diff --current <config> --candidate <candidate> --plan <plan.json>
   probemux apply --plan <plan.json> --confirm APPLY
   probemux validate <manifest.json>
+  probemux dsh list [--dsh-home PATH] [--json]
   probemux dsh inspect [--dsh-home PATH] [--provider ID] [--model ID] [--json]
   probemux dsh probe --active [--dsh-home PATH] [--provider ID] [--model ID] [--output manifest.json]
   probemux dsh sync --active [--default-effort high] [--confirm APPLY] [--dsh-home PATH] [--output manifest.json]
@@ -257,6 +260,17 @@ function warnUnavailableCredential(target: { apiKeyEnv?: string; credential: { a
   }
 }
 
+async function dshListCommand(parsed: ParsedArgs): Promise<void> {
+  const dshHome = resolveDshHome(stringFlag(parsed, "dsh-home"));
+  const { settings } = await loadDshSettings(dshSettingsPath(dshHome));
+  const result = await buildDshList(settings, dshHome);
+  if (booleanFlag(parsed, "json")) {
+    writeStdout(`${dshListJson(result)}\n`);
+    return;
+  }
+  writeStdout(`${formatDshList(result)}\n`);
+}
+
 async function dshInspectCommand(parsed: ParsedArgs): Promise<void> {
   const target = await discoverDshTarget(dshOptions(parsed));
   const baseUrl = target.catalogEndpointUnresolved
@@ -276,6 +290,9 @@ async function dshInspectCommand(parsed: ParsedArgs): Promise<void> {
     `Models state: ${target.modelsState === "explicit" ? "explicit models list" : "catalog route"}`,
     ...(target.reasoningEffort ? [`Current default effort: ${target.reasoningEffort}`] : []),
     ...(target.catalogEndpointUnresolved ? [`Warning: ${CATALOG_ENDPOINT_UNRESOLVED_MESSAGE}`] : []),
+    ...(!target.credential.available && target.apiKeyEnv
+      ? [`Hint: no credential found for '${target.apiKeyEnv}'. Add it to DSH API keys or export it, then re-run.`]
+      : []),
   ];
   if (booleanFlag(parsed, "json")) {
     const json = {
@@ -434,6 +451,7 @@ async function dshCommand(parsed: ParsedArgs): Promise<void> {
   if (parsed.flags.get("help") === true || sub === "-h" || sub === "help") {
     process.stdout.write([
       "probe/dsh subcommands:",
+      "  dsh list [--dsh-home PATH] [--json]",
       "  dsh inspect [--dsh-home PATH] [--provider ID] [--model ID] [--json]",
       "  dsh probe --active [--dsh-home PATH] [--provider ID] [--model ID] [--output manifest.json]",
       "  dsh sync --active [--default-effort high] [--confirm APPLY] [--dsh-home PATH] [--output manifest.json]",
@@ -441,6 +459,7 @@ async function dshCommand(parsed: ParsedArgs): Promise<void> {
     ].join("\n"));
     return;
   }
+  if (sub === "list") return dshListCommand(parsed);
   if (sub === "inspect") return dshInspectCommand(parsed);
   if (sub === "probe") return dshProbeCommand(parsed);
   if (sub === "sync") return dshSyncCommand(parsed);

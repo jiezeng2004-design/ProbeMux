@@ -230,7 +230,6 @@ test("whitespace credential: rejection never leaks raw or trimmed value", async 
 });
 
 // ---------- fail-closed .credentials.yaml semantics ----------
-// ---------- fail-closed .credentials.yaml semantics ----------
 
 test("fail-closed case 1: credentials file absent -> cwd/.env succeeds", async () => {
   const home = await mkdtemp(join(tmpdir(), "probemux-cred-"));
@@ -339,4 +338,146 @@ test("fail-closed: parse errors include the path but never the file contents", a
       return true;
     },
   );
+});
+// ---------- versioned refs schema (real DSH .credentials.yaml shape) ----------
+
+const REAL_DSH_REFS = `version: 1
+refs:
+  DEEPSEEK_API_KEY: sk-real-deepseek-123456789
+  OPENROUTER_LATEST_API_KEY: sk-real-openrouter-123456789
+  OPENCODE_API_KEY: sk-real-opencode-123456789
+  NUBE_API_KEY: sk-real-nube-123456789
+  OPENCODE_LATEST_API_KEY: sk-real-opencode-latest-123
+`;
+
+test("versioned refs schema: every real DSH provider key resolves from refs", async () => {
+  const home = await mkdtemp(join(tmpdir(), "probemux-cred-"));
+  await writeFile(join(home, ".credentials.yaml"), REAL_DSH_REFS);
+  for (const key of [
+    "DEEPSEEK_API_KEY",
+    "OPENROUTER_LATEST_API_KEY",
+    "OPENCODE_API_KEY",
+    "NUBE_API_KEY",
+    "OPENCODE_LATEST_API_KEY",
+  ]) {
+    const result = await resolveCredential({ apiKeyEnv: key, dshHome: home });
+    assert.equal(result.source, "credentials-yaml", key);
+    assert.ok(result.value && result.value.startsWith("sk-"), key);
+  }
+});
+
+test("versioned refs schema: process env still wins", async () => {
+  const home = await mkdtemp(join(tmpdir(), "probemux-cred-"));
+  await writeFile(join(home, ".credentials.yaml"), REAL_DSH_REFS);
+  process.env.DEEPSEEK_API_KEY = "sk-from-process-123456789";
+  try {
+    const result = await resolveCredential({ apiKeyEnv: "DEEPSEEK_API_KEY", dshHome: home });
+    assert.equal(result.value, "sk-from-process-123456789");
+    assert.equal(result.source, "process-env");
+  } finally {
+    delete process.env.DEEPSEEK_API_KEY;
+  }
+});
+
+test("versioned refs schema: key absent from refs falls back to cwd/.env", async () => {
+  const home = await mkdtemp(join(tmpdir(), "probemux-cred-"));
+  const cwd = await mkdtemp(join(tmpdir(), "probemux-cwd-"));
+  await writeFile(join(home, ".credentials.yaml"), REAL_DSH_REFS);
+  await writeFile(join(cwd, ".env"), "SOME_OTHER_KEY=from-cwd-env-123456789\n");
+  const result = await resolveCredential({ apiKeyEnv: "SOME_OTHER_KEY", dshHome: home, cwd });
+  assert.equal(result.value, "from-cwd-env-123456789");
+  assert.equal(result.source, "cwd-dotenv");
+});
+
+test("versioned refs schema: key absent from refs and nowhere else -> unresolved", async () => {
+  const home = await mkdtemp(join(tmpdir(), "probemux-cred-"));
+  await writeFile(join(home, ".credentials.yaml"), REAL_DSH_REFS);
+  const result = await resolveCredential({ apiKeyEnv: "NO_SUCH_REF", dshHome: home });
+  assert.equal(result.value, undefined);
+  assert.equal(result.source, "unresolved");
+});
+
+test("versioned refs schema: refs value null FAILS and never falls back", async () => {
+  const home = await mkdtemp(join(tmpdir(), "probemux-cred-"));
+  const cwd = await mkdtemp(join(tmpdir(), "probemux-cwd-"));
+  await writeFile(join(home, ".credentials.yaml"), "version: 1\nrefs:\n  MY_API_KEY:\n");
+  await writeFile(join(cwd, ".env"), "MY_API_KEY=from-cwd-env-123456789\n");
+  await assert.rejects(
+    () => resolveCredential({ apiKeyEnv: "MY_API_KEY", dshHome: home, cwd }),
+    /not a valid non-empty string/,
+  );
+});
+
+test("versioned refs schema: refs value empty string FAILS", async () => {
+  const home = await mkdtemp(join(tmpdir(), "probemux-cred-"));
+  await writeFile(join(home, ".credentials.yaml"), "version: 1\nrefs:\n  MY_API_KEY: \"\"\n");
+  await assert.rejects(
+    () => resolveCredential({ apiKeyEnv: "MY_API_KEY", dshHome: home }),
+    /not a valid non-empty string/,
+  );
+});
+
+test("versioned refs schema: refs value too short FAILS with no leak", async () => {
+  const home = await mkdtemp(join(tmpdir(), "probemux-cred-"));
+  await writeFile(join(home, ".credentials.yaml"), "version: 1\nrefs:\n  MY_API_KEY: abc\n");
+  await assert.rejects(
+    () => resolveCredential({ apiKeyEnv: "MY_API_KEY", dshHome: home }),
+    (error: any) => {
+      const message = String(error.message ?? "");
+      assert.match(message, /too short to handle safely/);
+      assert.ok(!message.includes("abc"), "the value must never appear in the error");
+      return true;
+    },
+  );
+});
+
+test("versioned refs schema: refs not a mapping FAILS closed", async () => {
+  const home = await mkdtemp(join(tmpdir(), "probemux-cred-"));
+  const cwd = await mkdtemp(join(tmpdir(), "probemux-cwd-"));
+  await writeFile(join(home, ".credentials.yaml"), "version: 1\nrefs:\n  - broken\n");
+  await writeFile(join(cwd, ".env"), "MY_API_KEY=from-cwd-env-123456789\n");
+  await assert.rejects(
+    () => resolveCredential({ apiKeyEnv: "MY_API_KEY", dshHome: home, cwd }),
+    /'refs' section that is not a key-value mapping/,
+  );
+});
+
+test("versioned refs schema: refs as a scalar FAILS closed", async () => {
+  const home = await mkdtemp(join(tmpdir(), "probemux-cred-"));
+  await writeFile(join(home, ".credentials.yaml"), "version: 1\nrefs: oops\n");
+  await assert.rejects(
+    () => resolveCredential({ apiKeyEnv: "MY_API_KEY", dshHome: home }),
+    /'refs' section that is not a key-value mapping/,
+  );
+});
+
+test("versioned refs schema: version-only file (no refs) resolves nothing, falls back", async () => {
+  const home = await mkdtemp(join(tmpdir(), "probemux-cred-"));
+  const cwd = await mkdtemp(join(tmpdir(), "probemux-cwd-"));
+  await writeFile(join(home, ".credentials.yaml"), "version: 1\n");
+  await writeFile(join(cwd, ".env"), "MY_API_KEY=from-cwd-env-123456789\n");
+  const result = await resolveCredential({ apiKeyEnv: "MY_API_KEY", dshHome: home, cwd });
+  assert.equal(result.value, "from-cwd-env-123456789");
+  assert.equal(result.source, "cwd-dotenv");
+});
+
+test("versioned refs schema: resolved secret is redacted from any output-shaped string", async () => {
+  clearSecrets();
+  const home = await mkdtemp(join(tmpdir(), "probemux-cred-"));
+  const secret = "sk-refs-never-printed-987654321";
+  await writeFile(join(home, ".credentials.yaml"), `version: 1\nrefs:\n  SECRET_KEY: ${secret}\n`);
+  const result = await resolveCredential({ apiKeyEnv: "SECRET_KEY", dshHome: home });
+  assert.equal(result.value, secret);
+  const safe = sanitizeError(new Error(`boom ${secret}`));
+  assert.ok(!safe.includes(secret));
+  assert.ok(!redactSecrets(`header ${secret} tail`).includes(secret));
+  clearSecrets();
+});
+
+test("flat schema still resolves when the file also carries unrelated keys", async () => {
+  const home = await mkdtemp(join(tmpdir(), "probemux-cred-"));
+  await writeFile(join(home, ".credentials.yaml"), "MY_API_KEY: sk-flat-still-works-123456\nother: 1\n");
+  const result = await resolveCredential({ apiKeyEnv: "MY_API_KEY", dshHome: home });
+  assert.equal(result.value, "sk-flat-still-works-123456");
+  assert.equal(result.source, "credentials-yaml");
 });
