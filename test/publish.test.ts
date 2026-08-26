@@ -16,26 +16,32 @@ interface CmdResult {
   stderr: string;
 }
 
-/** Run a command through cmd.exe on Windows (needed for .cmd launchers like npm/probemux). */
+/** Run npm / installed package launchers on both Windows and POSIX CI hosts. */
 async function runCmd(command: string, args: string[], options: { cwd: string; env?: NodeJS.ProcessEnv }): Promise<CmdResult> {
   try {
-    // Quote the command name only when it contains spaces: cmd.exe cannot
-    // PATHEXT-resolve a quoted name (npm -> npm.cmd), but absolute paths with
-    // spaces need the quotes.
-    const quoted = command.includes(" ") ? `"${command}"` : command;
-    const result = await run("cmd.exe", ["/d", "/s", "/c", `${quoted} ${args.join(" ")}`], {
-      cwd: options.cwd,
-      env: { ...process.env, ...options.env },
-      windowsVerbatimArguments: false,
-    });
+    const env = { ...process.env, ...options.env };
+    if (process.platform === "win32") {
+      // Quote the command name only when it contains spaces: cmd.exe cannot
+      // PATHEXT-resolve a quoted name (npm -> npm.cmd), but absolute paths with
+      // spaces need the quotes.
+      const quoted = command.includes(" ") ? `"${command}"` : command;
+      const result = await run("cmd.exe", ["/d", "/s", "/c", `${quoted} ${args.join(" ")}`], {
+        cwd: options.cwd,
+        env,
+        windowsVerbatimArguments: false,
+      });
+      return { code: 0, stdout: result.stdout, stderr: result.stderr };
+    }
+
+    const result = await run(command, args, { cwd: options.cwd, env });
     return { code: 0, stdout: result.stdout, stderr: result.stderr };
   } catch (error) {
-    const e = error as { code?: number; stdout?: string; stderr?: string };
-    return { code: e.code ?? 1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
+    const e = error as { code?: number | string; stdout?: string; stderr?: string };
+    return { code: typeof e.code === "number" ? e.code : 1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
   }
 }
 
-test("npm pack -> fresh install -> probemux.cmd works (help, dsh help, dsh inspect)", async () => {
+test("npm pack -> fresh install -> probemux launcher works (help, dsh help, dsh inspect)", async () => {
   const work = await mkdtemp(join(tmpdir(), "pmux-publish-"));
   const packDir = join(work, "pack");
   const consumer = join(work, "consumer");
@@ -56,8 +62,9 @@ test("npm pack -> fresh install -> probemux.cmd works (help, dsh help, dsh inspe
     await writeFile(join(consumer, "package.json"), JSON.stringify({ name: "probemux-consumer", private: true, version: "0.0.0" }) + "\n");
     const installed = await runCmd("npm", ["install", "--no-audit", "--no-fund", tgzPath], { cwd: consumer });
     assert.equal(installed.code, 0, `npm install failed: ${installed.stderr}`);
-    const binCmd = join(consumer, "node_modules", ".bin", "probemux.cmd");
-    await assert.doesNotReject(() => readFile(binCmd), "probemux.cmd must exist after install");
+    const binName = process.platform === "win32" ? "probemux.cmd" : "probemux";
+    const binCmd = join(consumer, "node_modules", ".bin", binName);
+    await assert.doesNotReject(() => readFile(binCmd), `${binName} must exist after install`);
 
     // 3. probemux --help -> exit 0
     const help = await runCmd(binCmd, ["--help"], { cwd: consumer });
