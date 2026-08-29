@@ -201,7 +201,7 @@ ProbeMux 不试图维护一张“某模型理论上支持什么”的静态表�
 当前 npm 包：
 
 ```text
-probemux
+probemux@0.1.0
 ```
 
 安装：
